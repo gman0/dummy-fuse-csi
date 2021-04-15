@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dummy-fuse-pod
+spec:
+  containers:
+  - name: idle
+    image: alpine:3.13.5
+    imagePullPolicy: IfNotPresent
+    command: ["sleep"]
+    args: ["infinite"]
+    volumeMounts:
+    - name: mypvc
+      mountPath: /mnt
+  volumes:
+  - name: mypvc
+    persistentVolumeClaim: 
+      claimName: dummy-fuse-pvc
+      readOnly: false

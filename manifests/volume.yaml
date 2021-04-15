@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: dummy-fuse-pv
+spec:
+  accessModes:
+    - ReadWriteMany
+  capacity:
+    storage: 1Gi
+  csi:
+    driver: dummy-fuse-csi
+    volumeHandle: dummy-fuse-volume
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dummy-fuse-pvc
+spec:
+  accessModes:
+   - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  volumeName: dummy-fuse-pv
