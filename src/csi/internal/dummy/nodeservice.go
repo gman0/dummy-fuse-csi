@@ -79,7 +79,7 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	if err := bindMount(req.GetStagingTargetPath(), targetPath); err != nil {
+	if err := (bindMounter{}).mount(req.GetStagingTargetPath(), targetPath); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -110,7 +110,7 @@ func (ns *nodeService) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnp
 	if mounted, err := isMountpoint(targetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	} else if mounted {
-		if err = bindUnmount(targetPath); err != nil {
+		if err = (bindMounter{}).unmount(targetPath); err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount bind %s for volume %s: %v", targetPath, req.GetVolumeId(), err))
 		}
 	}
@@ -144,7 +144,7 @@ func (ns *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVo
 		return &csi.NodeStageVolumeResponse{}, nil
 	}
 
-	if err := fuseMount(stagingTargetPath); err != nil {
+	if err := (fuseMounter{}).mount("", stagingTargetPath); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
@@ -175,7 +175,7 @@ func (ns *nodeService) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnsta
 	if mounted, err := isMountpoint(stagingTargetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	} else if mounted {
-		if err = fuseUnmount(stagingTargetPath); err != nil {
+		if err = (fuseMounter{}).unmount(stagingTargetPath); err != nil {
 			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount %s for volume %s: %v", stagingTargetPath, req.GetVolumeId(), err))
 		}
 	}

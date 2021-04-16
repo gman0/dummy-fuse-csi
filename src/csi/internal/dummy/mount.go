@@ -1,17 +1,26 @@
 package dummy
 
-func fuseMount(mountpoint string) error {
+type mounterUnmounter interface {
+	mount(dev, mountpoint string) error
+	unmount(mountpoint string) error
+}
+
+type fuseMounter struct{}
+
+func (fuseMounter) mount(_, mountpoint string) error {
 	return execCommandErr("dummy-fuse", mountpoint)
 }
 
-func fuseUnmount(mountpoint string) error {
+func (fuseMounter) unmount(mountpoint string) error {
 	return execCommandErr("fusermount3", "-u", mountpoint)
 }
 
-func bindMount(from, to string) error {
+type bindMounter struct{}
+
+func (bindMounter) mount(from, to string) error {
 	return execCommandErr("mount", "--bind", from, to)
 }
 
-func bindUnmount(mountpoint string) error {
+func (bindMounter) unmount(mountpoint string) error {
 	return execCommandErr("umount", mountpoint)
 }

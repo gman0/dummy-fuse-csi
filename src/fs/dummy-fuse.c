@@ -96,6 +96,7 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--version") == 0) {
       printf("dummy-fuse version: %s\n", dummy_version);
+      break;
     }
   }
     

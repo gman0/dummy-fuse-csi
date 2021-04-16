@@ -28,12 +28,6 @@ func NewDriver(opts *DriverOpts) (*Driver, error) {
 		DriverOpts: opts,
 	}
 
-	if opts.MountCachePath != "" {
-		log.Println("Attempting to re-mount volumes")
-		remountStaged(opts.MountCachePath)
-		remountPublished(opts.MountCachePath)
-	}
-
 	// Initialize Identity Service
 	d.ids = newIdentityService(d)
 
@@ -44,6 +38,12 @@ func NewDriver(opts *DriverOpts) (*Driver, error) {
 }
 
 func (d *Driver) Run() error {
+	if d.DriverOpts.MountCachePath != "" {
+		log.Println("Attempting to re-mount volumes")
+		remountStaged(d.DriverOpts.MountCachePath)
+		remountPublished(d.DriverOpts.MountCachePath)
+	}
+
 	s := grpcserver.New(d.Endpoint)
 
 	log.Println("Registering Identity server")
