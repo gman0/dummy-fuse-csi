@@ -30,6 +30,7 @@ spec:
             allowPrivilegeEscalation: true
           image: "{{ .Values.csi.plugin.image }}"
           imagePullPolicy: Always
+          command: ["/bin/dummy-fuse-csi"]
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodeid=$(NODE_ID)"

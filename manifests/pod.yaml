@@ -4,11 +4,11 @@ metadata:
   name: dummy-fuse-pod
 spec:
   containers:
-  - name: idle
-    image: alpine:3.13.5
+  - name: dummy-workload
+    image: rvasek/dummy-fuse-csi:latest
     imagePullPolicy: IfNotPresent
-    command: ["sleep"]
-    args: ["infinite"]
+    command: ["/bin/dummy-fuse-workload"]
+    args: ["--file", "/mnt/dummy-file.txt"]
     volumeMounts:
     - name: mypvc
       mountPath: /mnt

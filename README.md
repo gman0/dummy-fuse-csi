@@ -21,7 +21,7 @@ or
 stat /home/kubelet/pods/ae344b80-3b07-4589-b1a1-ca75fa9debf2/volumes/kubernetes.io~csi/pvc-ec69de59-7823-4840-8eee-544f8261fef0/mount: transport endpoint is not connected
 ```
 
-The reason why this happens is of course because the FUSE file-system driver process lives in the Node plugin container. If this container dies, so does the FUSE driver, along with the mount it provides. This makes all FUSE-based, or any userspace storage drivers for that matter regardless of the technology used, unreliable in a CSI environment (DISCLAIMER: tested in Kubernetes only).
+The reason why this happens is of course because the FUSE file-system driver process lives in the Node plugin container. If this container dies, so does the FUSE driver, along with the mount it provides. This makes all FUSE-based drivers (or any mount provider whose lifetime is tied to the lifetime of its container) unreliable in a CSI environment. DISCLAIMER: tested in Kubernetes only.
 
 The purpose of dummy-fuse-csi is to be able to replicate this (mis)behavior as easily as possible without any unrelated components (i.e. an actual storage system) and to act as a testbed for any possible mitiagations or fixes of this problem.
 
@@ -80,7 +80,9 @@ pod/d-dummy-fuse-csi-qqm88   2/2     Running   0          86s
 ...
 ```
 
-`manifests` directory contains definitions for a PV/PVC and a Pod that mounts the volume.
+`manifests` directory contains definitions for:
+* a PV/PVC,
+* a Pod that mounts the volume, and the application opens a file inside the volume and periodically reads from it.
 
 ```
 $ kubectl create -f manifests/volume.yaml 
@@ -132,13 +134,19 @@ $  kubectl logs pod/d-dummy-fuse-csi-qqm88 -c nodeplugin
 2021/04/16 13:36:22 [ID:6] GRPC response: {}
 ```
 
-`dummy-fuse-pod` Pod mounts `dummy-fuse-pvc` PVC into `/mnt`. We can inspect its contents:
+`dummy-fuse-pod` Pod mounts `dummy-fuse-pvc` PVC into `/mnt`. We can inspect its contents and check the logs:
 
 ```
 $ kubectl exec dummy-fuse-pod -- /bin/sh -c "mount | grep /mnt ; ls -l /mnt"
 dummy-fuse on /mnt type fuse.dummy-fuse (rw,nosuid,nodev,relatime,user_id=0,group_id=0)
 total 0
 -r--r--r--    1 root     root            13 Jan  1  1970 dummy-file.txt
+
+$ kubectl logs pod/dummy-fuse-pod
+2021/04/26 08:47:21 opened file /mnt/dummy-file.txt
+2021/04/26 08:47:21 reading
+2021/04/26 08:47:26 reading
+2021/04/26 08:47:31 reading
 ```
 
 Everything is fine up until now.
@@ -179,4 +187,14 @@ $ kubectl exec dummy-fuse-pod -- /bin/sh -c "mount | grep /mnt ; ls -l /mnt"
 dummy-fuse on /mnt type fuse.dummy-fuse (rw,nosuid,nodev,relatime,user_id=0,group_id=0)
 ls: /mnt: Socket not connected
 command terminated with exit code 1
+
+$ kubectl logs pod/dummy-fuse-pod
+2021/04/26 08:47:21 opened file /mnt/dummy-file.txt
+...
+2021/04/26 08:48:36 reading
+2021/04/26 08:48:36 read error: read /mnt/dummy-file.txt: transport endpoint is not connected
+2021/04/26 08:48:41 reading
+2021/04/26 08:48:41 read error: read /mnt/dummy-file.txt: transport endpoint is not connected
+2021/04/26 08:48:46 reading
+2021/04/26 08:48:46 read error: read /mnt/dummy-file.txt: transport endpoint is not connected
 ```
