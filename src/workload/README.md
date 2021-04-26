@@ -1,6 +1,6 @@
 dummy-fuse-workload opens a file descriptor and periodically reads from the fd.
 
-Usage: `dummy-fuse-workload --file FILEPATH [--exit-on-error]`
+Usage: `dummy-fuse-workload -file FILEPATH [-exit-on-error] [-read-interval 5]`
 
 After restarting dummy-fuse-csi Pod, dummy-fuse-workload logs following error:
 

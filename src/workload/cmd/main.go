@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	exitOnError = flag.Bool("exit-on-error", false, "program should exit on I/O error")
-	filePath    = flag.String("file", "", "path to file")
-	period      = flag.Int("period", 5, "time between writes")
+	exitOnError  = flag.Bool("exit-on-error", false, "program should exit on I/O error")
+	filePath     = flag.String("file", "", "path to file")
+	readInterval = flag.Int("read-interval", 5, "time between reads")
 )
 
 func main() {
@@ -39,6 +39,6 @@ func main() {
 			}
 		}
 
-		time.Sleep(time.Duration(*period) * time.Second)
+		time.Sleep(time.Duration(*readInterval) * time.Second)
 	}
 }
