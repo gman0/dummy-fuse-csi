@@ -57,19 +57,22 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if _, isPending := ns.pendingVolOpts.LoadOrStore(req.GetVolumeId(), true); isPending {
-		// CO should try again
-		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", req.GetVolumeId()))
-	}
-	defer ns.pendingVolOpts.Delete(req.GetVolumeId())
+	var (
+		volID      = req.GetVolumeId()
+		targetPath = req.GetTargetPath()
+	)
 
-	targetPath := req.GetTargetPath()
+	if _, isPending := ns.pendingVolOpts.LoadOrStore(volID, true); isPending {
+		// CO should try again
+		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", volID))
+	}
+	defer ns.pendingVolOpts.Delete(volID)
 
 	if err := makeMountpoint(targetPath); err != nil {
 		// Failed to mkdir
 		return nil, status.Error(codes.Internal,
 			fmt.Sprintf("failed to create mountpoint for volume %s at %v: %v",
-				req.GetVolumeId(), targetPath, err))
+				volID, targetPath, err))
 	}
 
 	if mounted, err := isMountpoint(targetPath); err != nil {
@@ -83,7 +86,7 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	cachePublishMount(req.GetVolumeId(), req.GetStagingTargetPath(), req.GetTargetPath(), ns.d.DriverOpts.MountCachePath)
+	cachePublishMount(volID, req.GetStagingTargetPath(), targetPath, ns.d.DriverOpts.MountCachePath)
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
@@ -93,33 +96,24 @@ func (ns *nodeService) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnp
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if _, isPending := ns.pendingVolOpts.LoadOrStore(req.GetVolumeId(), true); isPending {
+	var (
+		volID      = req.GetVolumeId()
+		targetPath = req.GetTargetPath()
+	)
+
+	if _, isPending := ns.pendingVolOpts.LoadOrStore(volID, true); isPending {
 		// CO should try again
-		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", req.GetVolumeId()))
+		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", volID))
 	}
-	defer ns.pendingVolOpts.Delete(req.GetVolumeId())
+	defer ns.pendingVolOpts.Delete(volID)
 
-	targetPath := req.GetTargetPath()
-
-	if exists, err := pathExists(targetPath); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to stat %s for volume %s: %v", targetPath, req.GetVolumeId(), err.Error()))
-	} else if !exists {
-		return &csi.NodeUnpublishVolumeResponse{}, nil
-	}
-
-	if mounted, err := isMountpoint(targetPath); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	} else if mounted {
-		if err = (bindMounter{}).unmount(targetPath); err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount bind %s for volume %s: %v", targetPath, req.GetVolumeId(), err))
-		}
+	if err := (bindMounter{}).unmount(targetPath); err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount bind %s for volume %s: %v", targetPath, volID, err))
 	}
 
 	if err := rmMountpoint(targetPath); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to remove mountpoint %s for volume %s: %v", targetPath, req.GetVolumeId(), err))
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to remove mountpoint %s for volume %s: %v", targetPath, volID, err))
 	}
-
-	forgetPublishMount(req.GetVolumeId(), ns.d.DriverOpts.MountCachePath)
 
 	return &csi.NodeUnpublishVolumeResponse{}, nil
 }
@@ -129,13 +123,16 @@ func (ns *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVo
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if _, isPending := ns.pendingVolOpts.LoadOrStore(req.GetVolumeId(), true); isPending {
-		// CO should try again
-		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", req.GetVolumeId()))
-	}
-	defer ns.pendingVolOpts.Delete(req.GetVolumeId())
+	var (
+		volID             = req.GetVolumeId()
+		stagingTargetPath = req.GetStagingTargetPath()
+	)
 
-	stagingTargetPath := req.GetStagingTargetPath()
+	if _, isPending := ns.pendingVolOpts.LoadOrStore(volID, true); isPending {
+		// CO should try again
+		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", volID))
+	}
+	defer ns.pendingVolOpts.Delete(volID)
 
 	if mounted, err := isMountpoint(stagingTargetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -148,7 +145,7 @@ func (ns *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVo
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	cacheStageMount(req.GetVolumeId(), req.GetStagingTargetPath(), ns.d.DriverOpts.MountCachePath)
+	cacheStageMount(volID, req.GetStagingTargetPath(), ns.d.DriverOpts.MountCachePath)
 
 	return &csi.NodeStageVolumeResponse{}, nil
 }
@@ -158,29 +155,22 @@ func (ns *nodeService) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnsta
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	if _, isPending := ns.pendingVolOpts.LoadOrStore(req.GetVolumeId(), true); isPending {
+	var (
+		volID             = req.GetVolumeId()
+		stagingTargetPath = req.GetStagingTargetPath()
+	)
+
+	if _, isPending := ns.pendingVolOpts.LoadOrStore(volID, true); isPending {
 		// CO should try again
-		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", req.GetVolumeId()))
+		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", volID))
 	}
-	defer ns.pendingVolOpts.Delete(req.GetVolumeId())
+	defer ns.pendingVolOpts.Delete(volID)
 
-	stagingTargetPath := req.GetStagingTargetPath()
-
-	if exists, err := pathExists(stagingTargetPath); err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to stat %s for volume %s: %v", stagingTargetPath, req.GetVolumeId(), err.Error()))
-	} else if !exists {
-		return &csi.NodeUnstageVolumeResponse{}, nil
+	if err := (fuseMounter{}).unmount(stagingTargetPath); err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount %s for volume %s: %v", stagingTargetPath, volID, err))
 	}
 
-	if mounted, err := isMountpoint(stagingTargetPath); err != nil {
-		return nil, status.Error(codes.Internal, err.Error())
-	} else if mounted {
-		if err = (fuseMounter{}).unmount(stagingTargetPath); err != nil {
-			return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount %s for volume %s: %v", stagingTargetPath, req.GetVolumeId(), err))
-		}
-	}
-
-	forgetStageMount(req.GetVolumeId(), ns.d.DriverOpts.MountCachePath)
+	forgetStageMount(volID, ns.d.DriverOpts.MountCachePath)
 
 	return &csi.NodeUnstageVolumeResponse{}, nil
 }
