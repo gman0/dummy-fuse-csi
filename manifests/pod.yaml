@@ -8,7 +8,10 @@ spec:
     image: rvasek/dummy-fuse-csi:latest
     imagePullPolicy: IfNotPresent
     command: ["/bin/dummy-fuse-workload"]
-    args: ["--file", "/mnt/dummy-file.txt"]
+    args: [
+      "--file", "/mnt/dummy-file.txt",
+      "--exit-on-error"
+    ]
     volumeMounts:
     - name: mypvc
       mountPath: /mnt
