@@ -2,6 +2,8 @@
 
 dummy-fuse-csi implements a dummy FUSE file-system and a CSI Node Plugin that is able to make the file-system available to a workload on the node.
 
+This repository also offers dummy-fuse-workload dummy application that does some I/O periodically (e.g. reads from a file). This is to simulate some useful workload on the FUSE file-system and to trigger various error states.
+
 ## Overview
 
 ### Motivation
@@ -23,7 +25,7 @@ stat /home/kubelet/pods/ae344b80-3b07-4589-b1a1-ca75fa9debf2/volumes/kubernetes.
 
 The reason why this happens is of course because the FUSE file-system driver process lives in the Node plugin container. If this container dies, so does the FUSE driver, along with the mount it provides. This makes all FUSE-based drivers (or any mount provider whose lifetime is tied to the lifetime of its container) unreliable in a CSI environment. DISCLAIMER: tested in Kubernetes only.
 
-The purpose of dummy-fuse-csi is to be able to replicate this (mis)behavior as easily as possible without any unrelated components (i.e. an actual storage system) and to act as a testbed for any possible mitiagations or fixes of this problem.
+The purpose of dummy-fuse-csi is to be able to replicate this (mis)behavior as easily as possible without any unrelated components (i.e. an actual storage system) and to act as a testbed for any possible mitigations or fixes of this problem.
 
 dummy-fuse-csi provides a "hello world"-level FUSE file-system (libfuse3) and a CSI Node Plugin to manage the file-system in a container orchestrator. A Helm chart is included for easy deployment in Kubernetes. Once set up, and after creating a volume and a workload that consumes it, the mount life-time issue can be triggered by simply restarting the Node Plugin and then trying to access the volume from inside the workload.
 
@@ -37,19 +39,17 @@ stat: can't stat '/mnt': Socket not connected
 
 #### Mount again
 
-The Node Plugin could try to re-mount the volumes it was providing before it was restarted. dummy-fuse-csi implements this functionality, but unfortunately this isn't enough and works only halfway. The other half of the problem is stale bind-mounts in workloads. When a Pod is being created, Kubernetes will share the respective CSI mounts with the Pod, and this happends only during Pod start-up. When the Node Plugin remounts the respective volumes, Kubernetes would need to share them with the respective Pods again. 
+The Node Plugin could try to re-mount the volumes it was providing before it was restarted. dummy-fuse-csi implements this functionality, but unfortunately this isn't enough and works only halfway. The other half of the problem is stale bind-mounts in workloads. When a Pod is being created, Kubernetes will share the respective CSI mounts with the Pod, and this happens only during Pod start-up. When the Node Plugin remounts the respective volumes, Kubernetes would need to share them with the respective Pods again. 
 
 Even if this worked, if the workload/application was storing open file descriptors from the volume before the FUSE process died, all of these would be invalid now anyway.
 
 #### Separate FUSE containers
 
-The FUSE process doesn't necessarily need to live in the same container as the Node Plugin. Should the Node Plugin container die, the FUSE container might survive. Still, the FUSE driver itself crashes, or needs to be updated, we'd end up in the same situation.
+The FUSE process doesn't necessarily need to live in the same container as the Node Plugin. Should the Node Plugin container die, the FUSE container might survive. Still, if the FUSE driver itself crashes, or needs to be updated, we'd end up in the same situation. Not a real solution.
 
 #### Proper Kubernetes support
 
-The naive safest way to handle this problem would be to monitor for unhealthy volumes (which we can already do). Based on this information, the Node Plugin along with all the Pods that make use of the volumes it provides could be restarted. All volumes would then be mounted again, effectively solving the problem.
-
-This is of course only one of the possible ways, and needs to be discussed with sig-storage.
+The naive safest way to handle this problem would be to monitor for unhealthy volumes (which we can already do). Based on this information, the Pods that make use of the concerned volumes could be restarted. This would trigger volume unmount-mount cycle, effectively restoring the mounts.
 
 ## Deployment
 
@@ -60,6 +60,16 @@ helm install <deployment name> chart/dummy-fuse-csi
 ```
 
 `csi.plugin.restoreMounts` chart value is set to `true` by default. It attempts (but ultimately fails) to restore existing mounts on startup.
+
+### restoreMounts mitigation
+
+When `csi.plugin.restoreMounts` chart value is enabled, dummy-fuse-csi attempts to restore existing mounts on startup.
+
+It stores mount instructions in node-local storage. These instructions are created for each `NodeStageVolume` and `NodePublishVolume` RPC and then later removed on `NodeUnpublishVolume` and `NodeUnstageVolume` RPCs. Should the node plugin be restarted after Stage/Publish calls, but before Unpublish/Unstage calls, dummy-fuse-csi will attempt to replay the stored mount instructions, remounting the volumes.
+
+This only restores FUSE and bind mounts from the node plugin onto the node. This is only one half of the solution. The other is restoring these mounts from the node and into the Pods that consume the concerned volumes. In order to do that, the CO must restart these consumer Pods, or they need to trigger the restart themselves (e.g. when a consumer container dies due to I/O error). Kubernetes doesn't implement this functionality yet, and it depends on the particular application how it handles I/O errors and if such error would make it `exit()`.
+
+All in all, this is a very unreliable mitigation and not a general solution at all.
 
 ## Demo
 
@@ -198,3 +208,55 @@ $ kubectl logs pod/dummy-fuse-pod
 2021/04/26 08:48:46 reading
 2021/04/26 08:48:46 read error: read /mnt/dummy-file.txt: transport endpoint is not connected
 ```
+
+## Demo with dummy-fuse-csi `csi.plugin.restoureMounts=true` and dummy-fuse-workload `--exit-on-error`
+
+It's possible to restore lost mounts in a very specific setup:
+* Deploy dummy-fuse-csi with `helm install d chart/dummy-fuse-csi --set csi.plugin.restoureMounts=true` (enabled by default). See [`restoreMounts` mitigation](#restoremounts-mitigation) for how this is implemented.
+* Deploy dummy-fuse-workload with `--exit-on-error` flag. This makes dummy-fuse-workload exit with a non-zero code when it encounters any I/O error.
+
+Now we delete dummy-fuse-csi Node Plugin again:
+```
+$ kubectl delete pod/d-dummy-fuse-csi-67skb
+pod "d-dummy-fuse-csi-67skb" deleted
+```
+
+```
+$ kubectl logs pod/dummy-fuse-pod -f
+2021/04/28 16:32:08 opened file /mnt/dummy-file.txt
+2021/04/28 16:32:08 reading
+...
+2021/04/28 16:32:38 reading
+2021/04/28 16:32:38 read error: read /mnt/dummy-file.txt: transport endpoint is not connected
+(EOF)
+```
+
+Only this time `dummy-fuse-pod` Pod is back up!
+```
+$ kubectl get pods
+NAME                                                 READY   STATUS    RESTARTS   AGE
+dummy-fuse-pod                                       1/1     Running   1          6m44s
+
+$ kubectl describe pod/dummy-fuse-pod
+...
+
+Events:
+  Type     Reason     Age                From               Message
+  ----     ------     ----               ----               -------
+  Normal   Scheduled  71s                default-scheduler  Successfully assigned default/dummy-fuse-pod to rvasek-testing-1-20-fson6szf6fed-node-0
+  Warning  Failed     40s                kubelet            Error: failed to generate container "e98a54c3969ef4cedab8f6f4b58a8ecc1b40a07ad514afb6eb388cd45d12e952" spec: failed to generate spec: failed to stat "/var/lib/kubelet/pods/8af8cf09-b2a1-4648-abf2-9e7f9677bf84/volumes/kubernetes.io~csi/dummy-fuse-pv/mount": stat /var/lib/kubelet/pods/8af8cf09-b2a1-4648-abf2-9e7f9677bf84/volumes/kubernetes.io~csi/dummy-fuse-pv/mount: transport endpoint is not connected
+  Normal   Pulled     26s (x3 over 70s)  kubelet            Container image "rvasek/dummy-fuse-csi:latest" already present on machine
+  Normal   Created    25s (x2 over 70s)  kubelet            Created container dummy-workload
+  Normal   Started    25s (x2 over 70s)  kubelet            Started container dummy-workload
+
+$ kubectl logs pod/dummy-fuse-pod
+2021/04/28 16:32:53 opened file /mnt/dummy-file.txt
+2021/04/28 16:32:53 reading
+2021/04/28 16:32:58 reading
+2021/04/28 16:33:03 reading
+...
+```
+
+This demo shows that it's possible to recover from broken FUSE mounts without any changes to Kubernetes, if:
+* the consumer application exits on at least `ENOTCONN`,
+* the CSI driver must be able to restore mounts on restart. This is not always possible, because in order to store the "mount instructions", some drivers would need to store also volume credentials.
