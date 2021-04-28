@@ -27,7 +27,7 @@ func execCommand(program string, args ...string) (stdout, stderr []byte, err err
 
 		log.Printf("process %d for %s %v: stderr: %s", cmd.Process.Pid, program, args, stderrBuf.Bytes())
 
-		return nil, nil, fmt.Errorf("process %d finished with failure for %s %v: %v",
+		return stdoutBuf.Bytes(), stderrBuf.Bytes(), fmt.Errorf("process %d finished with failure for %s %v: %v",
 			cmd.Process.Pid, program, args, err)
 	}
 
