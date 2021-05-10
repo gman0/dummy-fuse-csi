@@ -20,7 +20,6 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
     spec:
-      serviceAccountName: {{ include "dummy-fuse-csi.serviceAccountName" . }}
       containers:
         - name: nodeplugin
           securityContext:
