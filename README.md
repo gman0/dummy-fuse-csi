@@ -1,8 +1,8 @@
 # dummy-fuse-csi
 
-dummy-fuse-csi implements a dummy FUSE file-system and a CSI Node Plugin that is able to make the file-system available to a workload on the node.
+dummy-fuse implements a dummy FUSE file-system and a CSI Node Plugin that is able to make the file-system available to a workload on a node.
 
-This repository also offers dummy-fuse-workload dummy application that does some I/O periodically (e.g. reads from a file). This is to simulate some useful workload on the FUSE file-system and to trigger various error states.
+This repository also offers dummy-fuse-workload dummy application that does some I/O periodically (e.g. keeps a file open and reads from it). This is to simulate some useful workload on the FUSE file-system and to trigger various error states.
 
 ## Overview
 
@@ -27,7 +27,7 @@ The reason why this happens is of course because the FUSE file-system driver pro
 
 The purpose of dummy-fuse-csi is to be able to replicate this (mis)behavior as easily as possible without any unrelated components (i.e. an actual storage system) and to act as a testbed for any possible mitigations or fixes of this problem.
 
-dummy-fuse-csi provides a "hello world"-level FUSE file-system (libfuse3) and a CSI Node Plugin to manage the file-system in a container orchestrator. A Helm chart is included for easy deployment in Kubernetes. Once set up, and after creating a volume and a workload that consumes it, the mount life-time issue can be triggered by simply restarting the Node Plugin and then trying to access the volume from inside the workload.
+This repository provides a read-only, "hello world"-level FUSE file-system (libfuse3) and a CSI Node Plugin to manage the file-system in a container orchestrator. A Helm chart is included for easy deployment in Kubernetes. Once set up, and after creating a volume and a workload that consumes it, the mount life-time issue can be triggered by simply restarting the Node Plugin and then trying to access the volume from inside the workload.
 
 ```
 $ kubectl exec -it dummy-fuse-pod -- /bin/sh
@@ -65,7 +65,7 @@ helm install <deployment name> chart/dummy-fuse-csi
 
 When `csi.plugin.restoreMounts` chart value is enabled, dummy-fuse-csi attempts to restore existing mounts on startup.
 
-It stores mount instructions in node-local storage. These instructions are created for each `NodeStageVolume` and `NodePublishVolume` RPC and then later removed on `NodeUnpublishVolume` and `NodeUnstageVolume` RPCs. Should the node plugin be restarted after Stage/Publish calls, but before Unpublish/Unstage calls, dummy-fuse-csi will attempt to replay the stored mount instructions, remounting the volumes.
+It stores mount instructions (device and mountpoint paths, mount flags) in node-local storage (a hostPath volume). These instructions are created for each `NodeStageVolume` and `NodePublishVolume` RPC and then later removed on `NodeUnpublishVolume` and `NodeUnstageVolume` RPCs. Should the node plugin be restarted after Stage/Publish calls, but before Unpublish/Unstage calls, dummy-fuse-csi will attempt to replay the stored mount instructions, remounting the volumes.
 
 This only restores FUSE and bind mounts from the node plugin onto the node. This is only one half of the solution. The other is restoring these mounts from the node and into the Pods that consume the concerned volumes. In order to do that, the CO must restart these consumer Pods, or they need to trigger the restart themselves (e.g. when a consumer container dies due to I/O error). Kubernetes doesn't implement this functionality yet, and it depends on the particular application how it handles I/O errors and if such error would make it `exit()`.
 
