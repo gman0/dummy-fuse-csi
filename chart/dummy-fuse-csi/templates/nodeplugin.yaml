@@ -1,9 +1,10 @@
 kind: DaemonSet
 apiVersion: apps/v1
 metadata:
-  name: {{ include "dummy-fuse-csi.fullname" . }}
+  name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
   labels:
     app: {{ include "dummy-fuse-csi.name" . }}
+    component: nodeplugin
     chart: {{ include "dummy-fuse-csi.chart" . }}
     release: {{ .Release.Name }}
     heritage: {{ .Release.Service }}
@@ -11,11 +12,13 @@ spec:
   selector:
     matchLabels:
       app: {{ include "dummy-fuse-csi.name" . }}
+      component: nodeplugin
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
         app: {{ include "dummy-fuse-csi.name" . }}
+        component: nodeplugin
         chart: {{ include "dummy-fuse-csi.chart" . }}
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
@@ -28,7 +31,7 @@ spec:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
           image: "{{ .Values.csi.plugin.image }}"
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["/bin/dummy-fuse-csi"]
           args:
             - "--endpoint=$(CSI_ENDPOINT)"

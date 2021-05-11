@@ -25,15 +25,15 @@ If release name contains chart name it will be used as a full name.
 {{- end -}}
 
 {{/*
-Create the name of the service account to use for the node plugin.
-*/}}
-{{- define "dummy-fuse-csi.serviceAccountName" -}}
-{{ include "dummy-fuse-csi.fullname" . }}
-{{- end -}}
-
-{{/*
 Create chart name and version as used by the chart label.
 */}}
 {{- define "dummy-fuse-csi.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/*
+Create node plugin DaemonSet name.
+*/}}
+{{- define "dummy-fuse-csi.name.nodeplugin" -}}
+{{- printf "%s" (include "dummy-fuse-csi.name" .) -}}
 {{- end -}}
