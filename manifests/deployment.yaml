@@ -1,0 +1,31 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: dummy-workload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dummy-workload
+  template:
+    metadata:
+      labels:
+        app: dummy-workload
+    spec:
+      containers:
+      - name: dummy-workload
+        image: rvasek/dummy-fuse-csi:latest
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/dummy-fuse-workload"]
+        args: [
+          "--file", "/mnt/dummy-file.txt",
+          "--exit-on-error"
+        ]
+        volumeMounts:
+        - name: mypvc
+          mountPath: /mnt
+      volumes:
+      - name: mypvc
+        persistentVolumeClaim: 
+          claimName: dummy-fuse-pvc
+          readOnly: false
