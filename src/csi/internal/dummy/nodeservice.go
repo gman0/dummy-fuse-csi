@@ -3,6 +3,7 @@ package dummy
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -58,8 +59,9 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 	}
 
 	var (
-		volID      = req.GetVolumeId()
-		targetPath = req.GetTargetPath()
+		volID             = req.GetVolumeId()
+		stagingTargetPath = req.GetStagingTargetPath()
+		targetPath        = req.GetTargetPath()
 	)
 
 	if _, isPending := ns.pendingVolOpts.LoadOrStore(volID, true); isPending {
@@ -68,11 +70,36 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 	}
 	defer ns.pendingVolOpts.Delete(volID)
 
+	if stagingNeedsRestore, err := checkNeedsMountRestore(stagingTargetPath); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to check staging target path %s for volume %s: %v",
+			stagingTargetPath, volID, err)
+	} else if stagingNeedsRestore {
+		// Restore staging target path by unmounting and mounting again.
+		(fuseMounter{}).unmount(stagingTargetPath) // Deliberately ignore errors.
+		if err := (fuseMounter{}).mount("", stagingTargetPath); err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+	}
+
 	if err := makeMountpoint(targetPath); err != nil {
-		// Failed to mkdir
-		return nil, status.Error(codes.Internal,
-			fmt.Sprintf("failed to create mountpoint for volume %s at %v: %v",
-				volID, targetPath, err))
+		// Failed to os.MkdirAll.
+
+		// MkDirAll may have returned EEXIST which may be a result of dangling FUSE mount.
+		if os.IsExist(err) {
+			if publishNeedsRestore, err := checkNeedsMountRestore(targetPath); err != nil {
+				return nil, status.Errorf(codes.Internal, "failed to check publish target path %s for volume %s: %v",
+					targetPath, volID, err)
+			} else if publishNeedsRestore {
+				// Restore publish target path by unmounting.
+				// Mount is down below.
+				(fuseMounter{}).unmount(targetPath) // Deliberately ignore errors.
+			}
+		} else {
+			// It's something else.
+			return nil, status.Error(codes.Internal,
+				fmt.Sprintf("failed to create mountpoint for volume %s at %v: %v",
+					volID, targetPath, err))
+		}
 	}
 
 	if mounted, err := isMountpoint(targetPath); err != nil {
@@ -82,11 +109,11 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 		return &csi.NodePublishVolumeResponse{}, nil
 	}
 
-	if err := (bindMounter{}).mount(req.GetStagingTargetPath(), targetPath); err != nil {
+	if err := (bindMounter{}).mount(stagingTargetPath, targetPath); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	cachePublishMount(volID, req.GetStagingTargetPath(), targetPath, ns.d.DriverOpts.MountCachePath)
+	cachePublishMount(volID, stagingTargetPath, targetPath, ns.d.DriverOpts.MountCachePath)
 
 	return &csi.NodePublishVolumeResponse{}, nil
 }
@@ -181,4 +208,25 @@ func (ns *nodeService) NodeGetVolumeStats(ctx context.Context, req *csi.NodeGetV
 
 func (ns *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpandVolumeRequest) (*csi.NodeExpandVolumeResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "RPC not implemented")
+}
+
+func checkNeedsMountRestore(path string) (bool, error) {
+	var (
+		mounted     bool
+		dangling    bool
+		mountedErr  error
+		danglingErr error
+	)
+
+	if mounted, mountedErr = isMountpoint(path); mountedErr != nil {
+		if dangling, danglingErr = isDanglingMountpoint(path); danglingErr != nil {
+			return false, danglingErr
+		} else if dangling {
+			return true, nil
+		}
+
+		return false, mountedErr
+	}
+
+	return !mounted, mountedErr
 }
