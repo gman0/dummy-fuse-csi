@@ -1,0 +1,51 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+  labels:
+    app: {{ include "dummy-fuse-csi.name" . }}
+    component: nodeplugin
+    chart: {{ include "dummy-fuse-csi.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+  labels:
+    app: {{ include "dummy-fuse-csi.name" . }}
+    component: nodeplugin
+    chart: {{ include "dummy-fuse-csi.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+  labels:
+    app: {{ include "dummy-fuse-csi.name" . }}
+    component: nodeplugin
+    chart: {{ include "dummy-fuse-csi.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+  apiGroup: rbac.authorization.k8s.io

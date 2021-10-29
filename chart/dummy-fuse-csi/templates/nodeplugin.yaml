@@ -23,6 +23,24 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
     spec:
+      serviceAccountName: {{ include "dummy-fuse-csi.name.nodeplugin" . }}
+      {{- if .Values.csi.plugin.useMountReconciler }}
+      initContainers:
+        - name: reconciler
+          image: "{{ .Values.csi.plugin.image }}"
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/dummy-fuse-reconciler"]
+          args:
+            - "--node-name=$(NODE_ID)"
+            - "--csi-name=$(DRIVER_NAME)"
+          env:
+            - name: DRIVER_NAME
+              value: {{ .Values.csi.plugin.name }}
+            - name: NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+      {{- end }}
       containers:
         - name: nodeplugin
           securityContext:

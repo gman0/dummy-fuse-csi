@@ -4,7 +4,10 @@ csi:
     image: rvasek/dummy-fuse-csi:latest
 
     # Attempt to restore FUSE mounts. Doesn't work.
-    restoreMounts: true
+    restoreMounts: false
+
+    # Attempt to restore FUSE mounts using dummy-fuse-reconciler.
+    useMountReconciler: true
 
   registrar:
     image: quay.io/k8scsi/csi-node-driver-registrar:v2.1.0
