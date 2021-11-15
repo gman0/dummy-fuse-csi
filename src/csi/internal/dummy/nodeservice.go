@@ -118,6 +118,13 @@ func (ns *nodeService) NodeUnpublishVolume(ctx context.Context, req *csi.NodeUnp
 	}
 	defer ns.pendingVolOpts.Delete(volID)
 
+	if mounted, err := isMountpoint(targetPath); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	} else if !mounted {
+		// Already unmounted
+		return &csi.NodeUnpublishVolumeResponse{}, nil
+	}
+
 	if err := (bindMounter{}).unmount(targetPath); err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount bind %s for volume %s: %v", targetPath, volID, err))
 	}
@@ -181,6 +188,13 @@ func (ns *nodeService) NodeUnstageVolume(ctx context.Context, req *csi.NodeUnsta
 		return nil, status.Error(codes.Aborted, fmt.Sprintf("volume %s is already being processed", volID))
 	}
 	defer ns.pendingVolOpts.Delete(volID)
+
+	if mounted, err := isMountpoint(stagingTargetPath); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	} else if !mounted {
+		// Already unmounted
+		return &csi.NodeUnstageVolumeResponse{}, nil
+	}
 
 	if err := (fuseMounter{}).unmount(stagingTargetPath); err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to unmount %s for volume %s: %v", stagingTargetPath, volID, err))
