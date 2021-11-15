@@ -70,36 +70,20 @@ func (ns *nodeService) NodePublishVolume(ctx context.Context, req *csi.NodePubli
 	}
 	defer ns.pendingVolOpts.Delete(volID)
 
-	if stagingNeedsRestore, err := checkNeedsMountRestore(stagingTargetPath); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to check staging target path %s for volume %s: %v",
-			stagingTargetPath, volID, err)
-	} else if stagingNeedsRestore {
-		// Restore staging target path by unmounting and mounting again.
-		(fuseMounter{}).unmount(stagingTargetPath) // Deliberately ignore errors.
-		if err := (fuseMounter{}).mount("", stagingTargetPath); err != nil {
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		}
+	if err := tryRestoreStagingMountInNodePublish(stagingTargetPath); err != nil {
+		return nil, status.Errorf(codes.Internal,
+			"tryRestoreStagingMountInNodePublish failed for volume %s: %v", volID, err)
+	}
+
+	if err := tryRestoreFusePublishMountInNodePublish(targetPath); err != nil {
+		return nil, status.Errorf(codes.Internal,
+			"tryRestoreFusePublishMountInNodePublish failed for volume %s: %v", volID, err)
 	}
 
 	if err := makeMountpoint(targetPath); err != nil {
-		// Failed to os.MkdirAll.
-
-		// MkDirAll may have returned EEXIST which may be a result of dangling FUSE mount.
-		if os.IsExist(err) {
-			if publishNeedsRestore, err := checkNeedsMountRestore(targetPath); err != nil {
-				return nil, status.Errorf(codes.Internal, "failed to check publish target path %s for volume %s: %v",
-					targetPath, volID, err)
-			} else if publishNeedsRestore {
-				// Restore publish target path by unmounting.
-				// Mount is down below.
-				(fuseMounter{}).unmount(targetPath) // Deliberately ignore errors.
-			}
-		} else {
-			// It's something else.
-			return nil, status.Error(codes.Internal,
-				fmt.Sprintf("failed to create mountpoint for volume %s at %v: %v",
-					volID, targetPath, err))
-		}
+		return nil, status.Error(codes.Internal,
+			fmt.Sprintf("failed to create mountpoint for volume %s at %v: %v",
+				volID, targetPath, err))
 	}
 
 	if mounted, err := isMountpoint(targetPath); err != nil {
@@ -161,6 +145,11 @@ func (ns *nodeService) NodeStageVolume(ctx context.Context, req *csi.NodeStageVo
 	}
 	defer ns.pendingVolOpts.Delete(volID)
 
+	if err := tryRestoreStagingMountInNodeStage(stagingTargetPath); err != nil {
+		return nil, status.Errorf(codes.Internal,
+			"tryRestoreStagingMountInNodeStage failed for volume %s: %v", volID, err)
+	}
+
 	if mounted, err := isMountpoint(stagingTargetPath); err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	} else if mounted {
@@ -211,22 +200,84 @@ func (ns *nodeService) NodeExpandVolume(ctx context.Context, req *csi.NodeExpand
 }
 
 func checkNeedsMountRestore(path string) (bool, error) {
-	var (
-		mounted     bool
-		dangling    bool
-		mountedErr  error
-		danglingErr error
-	)
+	dangling, err := isDanglingMountpoint(path)
 
-	if mounted, mountedErr = isMountpoint(path); mountedErr != nil {
-		if dangling, danglingErr = isDanglingMountpoint(path); danglingErr != nil {
-			return false, danglingErr
-		} else if dangling {
-			return true, nil
-		}
-
-		return false, mountedErr
+	if os.IsNotExist(err) {
+		return false, nil
 	}
 
-	return !mounted, mountedErr
+	return dangling, err
+}
+
+// Try to restore FUSE mount of the staging target path in NodeStageVolume.
+// If corruption is detected, try to only unmount the volume. NodeStageVolume
+// should be able to continue with mounting the volume normally afterwards.
+func tryRestoreStagingMountInNodeStage(stagingPath string) error {
+	needsRestore, err := checkNeedsMountRestore(stagingPath)
+	if err != nil {
+		return err
+	}
+
+	if !needsRestore {
+		return nil
+	}
+
+	// We assume the mount is corrupted. Restoration here means only unmounting the volume.
+	// NodePublishVolume should take care of creating the bind-mount again.
+
+	if err = (fuseMounter{}).unmount(stagingPath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Try to restore FUSE mount of the staging target path in NodePublishVolume.
+// If corruption is detected, try to unmount and then mount the volume.
+func tryRestoreStagingMountInNodePublish(stagingPath string) error {
+	needsRestore, err := checkNeedsMountRestore(stagingPath)
+	if err != nil {
+		return err
+	}
+
+	if !needsRestore {
+		return nil
+	}
+
+	// We assume the mount is corrupted. Try to remount the volume.
+
+	m := fuseMounter{}
+
+	if err = m.unmount(stagingPath); err != nil {
+		return err
+	}
+
+	if err = m.mount("", stagingPath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Try to restore FUSE bind-mount of the publish target path in NodePublishVolume.
+// If corruption is detected, try to only unmount the volume. NodePublishVolume
+// should be able to continue with creating bind-mount normally afterwards.
+func tryRestoreFusePublishMountInNodePublish(targetPath string) error {
+	needsRestore, err := checkNeedsMountRestore(targetPath)
+	if err != nil {
+		return err
+	}
+
+	if !needsRestore {
+		return nil
+	}
+
+	// We assume the mount is corrupted. Restoration here means only unmounting the volume.
+	// NodePublishVolume should take care of creating the bind-mount again.
+
+	if err = (bindMounter{}).unmount(targetPath); err != nil {
+		return err
+	}
+
+	return nil
 }

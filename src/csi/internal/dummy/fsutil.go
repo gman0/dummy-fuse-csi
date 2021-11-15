@@ -38,21 +38,17 @@ func isDanglingMountpoint(path string) (bool, error) {
 	var st syscall.Stat_t
 	err := syscall.Stat(path, &st)
 
-	if err != nil {
-		if err == syscall.ENOTCONN {
-			// Caused by exited FUSE
-			return true, nil
-		}
-
-		if err == syscall.ENOENT {
-			// Path doesn't exist
-			return false, nil
-		}
-
-		return false, err
+	recognizedCorruptedMountErrs := []syscall.Errno{
+		syscall.ENOTCONN,
 	}
 
-	return false, nil
+	for _, e := range recognizedCorruptedMountErrs {
+		if err == e {
+			return true, nil
+		}
+	}
+
+	return false, err
 }
 
 func pathExists(path string) (bool, error) {
