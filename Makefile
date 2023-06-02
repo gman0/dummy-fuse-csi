@@ -27,7 +27,7 @@ dummy-fuse-workload:
 	cd src/workload; CGO_ENABLED=0 go build -ldflags $(WORKLOAD_GOLDFLAGS) -o ../../$(BUILD_DIR)/$@ cmd/main.go
 
 image: dummy-fuse dummy-fuse-csi dummy-fuse-workload
-	docker build -f ./Dockerfile $(BUILD_DIR) -t $(IMAGE):$(IMAGE_TAG)
+	podman build -f ./Dockerfile $(BUILD_DIR) -t $(IMAGE):$(IMAGE_TAG)
 
 generate-compile-flags:
 	$(shell echo $(CFLAGS) | tr " " "\n" > compile_flags.txt)

@@ -7,7 +7,11 @@ import (
 )
 
 func makeMountpoint(path string) error {
-	return os.MkdirAll(path, 0750)
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return os.MkdirAll(path, 0750)
+	}
+
+	return nil
 }
 
 func rmMountpoint(path string) error {
