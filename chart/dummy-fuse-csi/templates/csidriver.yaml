@@ -1,7 +1,7 @@
 apiVersion: storage.k8s.io/v1
 kind: CSIDriver
 metadata:
-  name: {{ .Values.csi.plugin.name }}
+  name: {{ .Values.csiDriverName }}
 spec:
   attachRequired: false
   podInfoOnMount: false

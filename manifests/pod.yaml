@@ -5,12 +5,13 @@ metadata:
 spec:
   containers:
   - name: dummy-workload
-    image: rvasek/dummy-fuse-csi:latest
-    imagePullPolicy: IfNotPresent
+    image: registry.cern.ch/rvasek/dummy-fuse-csi:latest
+    imagePullPolicy: Always
     command: ["/bin/dummy-fuse-workload"]
     args: [
       "--file", "/mnt/dummy-file.txt",
-      "--exit-on-error"
+      # "--exit-on-error",
+      # "--keep-open",
     ]
     volumeMounts:
     - name: mypvc

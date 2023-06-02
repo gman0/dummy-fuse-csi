@@ -4,11 +4,11 @@ metadata:
   name: dummy-fuse-pv
 spec:
   accessModes:
-    - ReadWriteMany
+    - ReadOnlyMany
   capacity:
     storage: 1Gi
   csi:
-    driver: dummy-fuse-csi
+    driver: dummy-fuse-csi.cern.ch
     volumeHandle: dummy-fuse-volume
 ---
 apiVersion: v1
@@ -17,7 +17,7 @@ metadata:
   name: dummy-fuse-pvc
 spec:
   accessModes:
-   - ReadWriteMany
+   - ReadOnlyMany
   resources:
     requests:
       storage: 1Gi

@@ -30,25 +30,24 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: "{{ .Values.csi.plugin.image }}"
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.driver.image }}"
+          imagePullPolicy: Always
           command: ["/bin/dummy-fuse-csi"]
           args:
             - "--endpoint=$(CSI_ENDPOINT)"
             - "--nodeid=$(NODE_ID)"
-            - "--name=$(DRIVER_NAME)"
-            {{- if .Values.csi.plugin.restoreMounts }}
-            - "--mount-cache-path=/csi/mountcache"
-            {{- end }}
+            - "--drivername=$(DRIVER_NAME)"
+            - "--role=identity,node"
+            - "--v={{ .Values.logVerbosityLevel }}"
           env:
             - name: DRIVER_NAME
-              value: {{ .Values.csi.plugin.name }}
+              value: {{ .Values.csiDriverName }}
             - name: NODE_ID
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
             - name: CSI_ENDPOINT
-              value: "unix:///csi/csi.sock"
+              value: unix:///csi/{{ .Values.csiPluginSocketFile }}
           volumeMounts:
             - name: socket-dir
               mountPath: /csi
@@ -59,11 +58,11 @@ spec:
               mountPath: /var/lib/kubelet/pods
               mountPropagation: Bidirectional
         - name: registrar
-          image: "{{ .Values.csi.registrar.image }}"
+          image: {{ .Values.registrar.image }}
           args:
-            - "--v=5"
-            - "--csi-address=/csi/csi.sock"
-            - "--kubelet-registration-path=/var/lib/kubelet/plugins/{{ .Values.csi.plugin.name }}/csi.sock"
+            - "--v={{ .Values.logVerbosityLevel }}"
+            - "--csi-address=/csi/{{ .Values.csiPluginSocketFile }}"
+            - "--kubelet-registration-path={{ .Values.kubeletDirectory }}/plugins/{{ .Values.csiDriverName }}/{{ .Values.csiPluginSocketFile }}"
           env:
             - name: KUBE_NODE_NAME
               valueFrom:
@@ -78,17 +77,16 @@ spec:
       volumes:
         - name: socket-dir
           hostPath:
-            path: "/var/lib/kubelet/plugins/{{ .Values.csi.plugin.name }}"
+            path: {{ .Values.kubeletDirectory }}/plugins/{{ .Values.csiDriverName }}
             type: DirectoryOrCreate
-        - name: registration-dir
-          hostPath:
-            path: /var/lib/kubelet/plugins_registry
-            type: Directory
         - name: plugins-dir
           hostPath:
-            path: /var/lib/kubelet/plugins
+            path: {{ .Values.kubeletDirectory }}/plugins
+        - name: registration-dir
+          hostPath:
+            path: {{ .Values.kubeletDirectory }}/plugins_registry
             type: DirectoryOrCreate
         - name: pod-mounts
           hostPath:
-            path: /var/lib/kubelet/pods
+            path: {{ .Values.kubeletDirectory }}/pods
             type: Directory

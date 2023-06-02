@@ -1,13 +1,27 @@
-csi:
-  plugin:
-    name: dummy-fuse-csi
-    image: rvasek/dummy-fuse-csi:latest
+driver:
+  image: registry.cern.ch/rvasek/dummy-fuse-csi:latest
 
-    # Attempt to restore FUSE mounts. Doesn't work.
-    restoreMounts: true
+registrar:
+  image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
 
-  registrar:
-    image: quay.io/k8scsi/csi-node-driver-registrar:v2.1.0
+# Log verbosity level.
+# See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md
+# for description of individual verbosity levels.
+logVerbosityLevel: 4
+
+# Dummy FUSE CSI driver name used as driver identifier by Kubernetes.
+# Must follow DNS notation format (https://tools.ietf.org/html/rfc1035#section-2.3.1),
+# and must be 63 characters or less.
+csiDriverName: dummy-fuse-csi.cern.ch
+
+# Kubelet's plugin directory path. By default, kubelet uses /var/lib/kubelet/plugins.
+# This value may need to be changed if kubelet's root dir (--root-dir) differs from
+# this default path.
+kubeletDirectory: /var/lib/kubelet
+
+# Name of the CVMFS CSI socket file. CVMFS CSI socket file will be stored under
+# <kubeletPluginDirectory>/plugins/<csiDriverName>/<cvmfsCSIPluginSocketFile>.
+csiPluginSocketFile: csi.sock
 
 # Override the default app name using nameOverride
 # nameOverride: some-other-name
