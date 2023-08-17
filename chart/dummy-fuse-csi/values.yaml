@@ -19,8 +19,8 @@ csiDriverName: dummy-fuse-csi.cern.ch
 # this default path.
 kubeletDirectory: /var/lib/kubelet
 
-# Name of the CVMFS CSI socket file. CVMFS CSI socket file will be stored under
-# <kubeletPluginDirectory>/plugins/<csiDriverName>/<cvmfsCSIPluginSocketFile>.
+# Name of the Dummy FUSE CSI socket file. The socket file will be stored under
+# <kubeletPluginDirectory>/plugins/<csiDriverName>/<csiPluginSocketFile>.
 csiPluginSocketFile: csi.sock
 
 # Override the default app name using nameOverride
