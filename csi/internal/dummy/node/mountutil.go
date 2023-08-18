@@ -37,6 +37,10 @@ func slaveRecursiveBind(from, to string) error {
 	return err
 }
 
+func shareMount(mountpoint string) error {
+	return exec.Run(goexec.Command("mount", "--make-shared", mountpoint))
+}
+
 func recursiveUnmount(mountpoint string) error {
 	// We need recursive unmount because there are live mounts inside the bindmount.
 	// Unmounting only the upper autofs mount would result in EBUSY.

@@ -1,8 +1,24 @@
-driver:
-  image: registry.cern.ch/rvasek/dummy-fuse-csi:latest
+extraConfigMaps:
+  dummy-autofs-config:
+    auto.master: |
+      /- /etc/dummy.autofs
 
-registrar:
-  image: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
+images:
+  driver: registry.cern.ch/rvasek/dummy-fuse-csi:latest
+  registrar: registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.6.2
+
+driver:
+  extraVolumes:
+  - name: dummy-autofs-config
+    configMap:
+      name: dummy-autofs-config
+  nodeplugin:
+    extraVolumeMounts:
+    - name: dummy-autofs-config
+      mountPath: /etc/autofs/auto.master
+      subPath: auto.master
+  registrar:
+    extraVolumeMounts: []
 
 # Log verbosity level.
 # See https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/logging.md

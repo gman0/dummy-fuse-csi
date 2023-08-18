@@ -16,6 +16,7 @@ spec:
     volumeMounts:
     - name: mypvc
       mountPath: /mnt
+      mountPropagation: HostToContainer
   volumes:
   - name: mypvc
     persistentVolumeClaim: 

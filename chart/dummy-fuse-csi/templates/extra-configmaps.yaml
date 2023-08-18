@@ -1,0 +1,17 @@
+{{- range $key, $value := .Values.extraConfigMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $key }}
+  labels:
+    app: {{ include "dummy-fuse-csi.name" $ }}
+    component: nodeplugin
+    chart: {{ include "dummy-fuse-csi.chart" $ }}
+    release: {{ $.Release.Name }}
+    heritage: {{ $.Release.Service }}
+data:
+  {{- range $dataKey, $dataValue := $value }}
+  {{ $dataKey }}: {{ tpl (toYaml $dataValue) $ | indent 2 }}
+  {{- end }}
+{{- end }}

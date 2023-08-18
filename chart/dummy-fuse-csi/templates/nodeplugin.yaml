@@ -23,6 +23,7 @@ spec:
         release: {{ .Release.Name }}
         heritage: {{ .Release.Service }}
     spec:
+      hostPID: true
       containers:
         - name: nodeplugin
           securityContext:
@@ -30,7 +31,7 @@ spec:
             capabilities:
               add: ["SYS_ADMIN"]
             allowPrivilegeEscalation: true
-          image: "{{ .Values.driver.image }}"
+          image: "{{ .Values.images.driver }}"
           imagePullPolicy: Always
           command: ["/bin/dummy-fuse-csi"]
           args:
@@ -57,8 +58,11 @@ spec:
             - name: pod-mounts
               mountPath: /var/lib/kubelet/pods
               mountPropagation: Bidirectional
+            {{- with .Values.driver.nodeplugin.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
         - name: registrar
-          image: {{ .Values.registrar.image }}
+          image: {{ .Values.images.registrar }}
           args:
             - "--v={{ .Values.logVerbosityLevel }}"
             - "--csi-address=/csi/{{ .Values.csiPluginSocketFile }}"
@@ -74,6 +78,9 @@ spec:
               mountPath: /csi
             - name: registration-dir
               mountPath: /registration
+            {{- with .Values.driver.registrar.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: socket-dir
           hostPath:
@@ -90,3 +97,6 @@ spec:
           hostPath:
             path: {{ .Values.kubeletDirectory }}/pods
             type: Directory
+        {{- with .Values.driver.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}

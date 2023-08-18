@@ -69,6 +69,12 @@ func RunAndLogCombined(cmd *exec.Cmd) error {
 	})
 }
 
+func StartAndLogCombined(cmd *exec.Cmd) error {
+	return StartAndDoCombined(cmd, func(execID uint64, line string) {
+		log.Infof(FmtLogMsg(execID, line))
+	})
+}
+
 func RunAndDoCombined(cmd *exec.Cmd, eachCombinedOutLine func(execID uint64, line string)) error {
 	c := atomic.AddUint64(&execCounter, 1)
 	log.InfofDepth(2, FmtLogMsg(c, "Running command env=%v prog=%s args=%v"), cmd.Env, cmd.Path, cmd.Args)
@@ -88,4 +94,25 @@ func RunAndDoCombined(cmd *exec.Cmd, eachCombinedOutLine func(execID uint64, lin
 	}()
 
 	return cmd.Run()
+}
+
+func StartAndDoCombined(cmd *exec.Cmd, eachCombinedOutLine func(execID uint64, line string)) error {
+	c := atomic.AddUint64(&execCounter, 1)
+	log.InfofDepth(2, FmtLogMsg(c, "Running command env=%v prog=%s args=%v"), cmd.Env, cmd.Path, cmd.Args)
+
+	rd, wr := io.Pipe()
+	defer rd.Close()
+	defer wr.Close()
+
+	cmd.Stdout = wr
+	cmd.Stderr = wr
+
+	go func() {
+		scanner := bufio.NewScanner(rd)
+		for scanner.Scan() {
+			eachCombinedOutLine(c, scanner.Text())
+		}
+	}()
+
+	return cmd.Start()
 }

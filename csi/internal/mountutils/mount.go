@@ -12,9 +12,17 @@ func Unmount(mountpoint string, extraArgs ...string) error {
 	if err != nil {
 		// There are no well-defined exit codes for cases of "not mounted"
 		// and "doesn't exist". We need to check the output.
-		if bytes.HasSuffix(out, []byte(": not mounted")) ||
-			bytes.Contains(out, []byte("No such file or directory")) {
-			return nil
+
+		absorbErrs := [][]byte{
+			[]byte(": not mounted"),
+			[]byte("No such file or directory"),
+			[]byte(": Invalid argument"),
+		}
+
+		for i := range absorbErrs {
+			if bytes.Contains(out, absorbErrs[i]) {
+				return nil
+			}
 		}
 	}
 

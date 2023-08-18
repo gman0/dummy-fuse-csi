@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	goexec "os/exec"
+	"sync"
 
+	"github.com/gman0/dummy-fuse-csi/csi/internal/exec"
+	"github.com/gman0/dummy-fuse-csi/csi/internal/log"
 	"github.com/gman0/dummy-fuse-csi/csi/internal/mountutils"
 
 	"github.com/container-storage-interface/spec/lib/go/csi"
@@ -13,13 +17,52 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+var automountDaemonRunning sync.Once
+
 func reconcileStagingPath(stagingPath string) error {
-	return reconcileMount(stagingPath, mountDummyFuse)
+
+	// / # cat /etc/dummy.autofs
+	// /opt -fstype=fuse3 :dummy-fuse
+	// # ln -s /bin/dummy-fuse /bin/mount.dummy-fuse
+
+	return reconcileMount(stagingPath, func(mountpoint string) error {
+		// Write autofs map file.
+
+		mapFileContentsFmt := `
+%s -fstype=fuse3 :dummy-fuse
+`
+
+		if err := os.WriteFile("/etc/dummy.autofs", []byte(fmt.Sprintf(mapFileContentsFmt, stagingPath)), 0655); err != nil {
+			return err
+		}
+
+		// Start automount daemon.
+
+		if err := exec.RunAndLogCombined(goexec.Command("automount", "-f", "--debug")); err != nil {
+			return fmt.Errorf("failed to run automonut: %v", err)
+		}
+
+		automountDaemonRunning.Do(func() {
+			go func() {
+				if err := exec.RunAndLogCombined(goexec.Command("automount", "-f", "--debug")); err != nil {
+					log.Fatalf("Failed to run automount daemon: %v", err)
+				}
+			}()
+		})
+
+		// Share the mount.
+
+		if err := shareMount(mountpoint); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func reconcilePublishPath(stagingPath, publishPath string) error {
 	return reconcileMount(publishPath, func(mountpoint string) error {
-		return bindMount(stagingPath, mountpoint)
+		return slaveRecursiveBind(stagingPath, mountpoint)
 	})
 }
 
